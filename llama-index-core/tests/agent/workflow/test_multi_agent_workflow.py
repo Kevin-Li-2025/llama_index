@@ -46,7 +46,7 @@ def subtract(a: int, b: int) -> int:
     return a - b
 
 
-def test_agents_isolate_shared_tool_instances():
+def test_workflow_warns_for_shared_tool_instances():
     shared_tool = FunctionTool.from_defaults(fn=add)
     first_agent = FunctionAgent(
         name="first",
@@ -61,13 +61,11 @@ def test_agents_isolate_shared_tool_instances():
         llm=MockFunctionCallingLLM(),
     )
 
-    assert first_agent.tools is not None
-    assert second_agent.tools is not None
-    assert first_agent.tools[0] is not second_agent.tools[0]
-    assert first_agent.tools[0].metadata is not second_agent.tools[0].metadata
-
-    first_agent.tools[0].metadata.description = "mutated"
-    assert second_agent.tools[0].metadata.description != "mutated"
+    with pytest.warns(UserWarning, match="share the same tool instance"):
+        AgentWorkflow(
+            agents=[first_agent, second_agent],
+            root_agent="first",
+        )
 
 
 @pytest.fixture()

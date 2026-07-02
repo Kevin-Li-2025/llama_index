@@ -92,6 +92,32 @@ async def handoff(ctx: Context, to_agent: str, reason: str) -> str:
     return handoff_output_prompt.format(to_agent=to_agent, reason=reason)
 
 
+def _warn_if_agents_share_tools(agents: Sequence[BaseWorkflowAgent]) -> None:
+    tool_owner_by_id: Dict[int, str] = {}
+
+    for agent in agents:
+        for tool in agent.tools or []:
+            if not isinstance(tool, BaseTool):
+                continue
+
+            tool_id = id(tool)
+            previous_agent = tool_owner_by_id.get(tool_id)
+            if previous_agent is None:
+                tool_owner_by_id[tool_id] = agent.name
+                continue
+
+            if previous_agent == agent.name:
+                continue
+
+            warnings.warn(
+                f"Agents '{previous_agent}' and '{agent.name}' share the same "
+                f"tool instance '{tool.metadata.name}'. Tools can carry mutable "
+                "state, so create separate tool instances for each agent to "
+                "avoid cross-agent side effects.",
+                stacklevel=3,
+            )
+
+
 class AgentWorkflowMeta(WorkflowMeta, ABCMeta):
     """Metaclass for AgentWorkflow that inherits from WorkflowMeta."""
 
@@ -137,6 +163,8 @@ class AgentWorkflow(Workflow, PromptMixin, metaclass=AgentWorkflowMeta):
             raise ValueError(
                 "Initial state is not supported per-agent in AgentWorkflow"
             )
+
+        _warn_if_agents_share_tools(agents)
 
         self.agents = {cfg.name: cfg for cfg in agents}
         if len(agents) == 1:
